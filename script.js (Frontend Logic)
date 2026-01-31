@@ -1,0 +1,109 @@
+let currentUser = null;
+let paymentTimer = null;
+let numberData = null;
+
+// Auth Modal
+function showAuth() {
+    document.getElementById('authModal').classList.remove('hidden');
+    document.getElementById('welcome').classList.add('hidden');
+}
+
+function authUser() {
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    
+    fetch('/api/auth', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username, password})
+    }).then(r => r.json()).then(data => {
+        if(data.success) {
+            currentUser = data.user;
+            document.getElementById('authModal').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+        } else {
+            alert('Login failed');
+        }
+    });
+}
+
+// Payment Flow
+function showPayment() {
+    document.getElementById('paymentSection').classList.remove('hidden');
+}
+
+function showWallet() {
+    const method = document.getElementById('paymentMethod').value;
+    const wallets = {
+        erc20: '0xaEaF18f3985EE5683636391Ba4C9263A081eBDAf',
+        trc20: 'TAu3mof4U7cyk15TR8nBJdKcKvYyBEDCW6',
+        bep20: '0xaEaF18f3985EE5683636391Ba4C9263A081eBDAf',
+        solana: '6HAzii6RzcwvgB9sZQGqk7s4bLcYNtSbYajDcysCPTwk'
+    };
+    
+    document.getElementById('walletAddress').textContent = wallets[method];
+    document.getElementById('qrCode').src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${wallets[method]}`;
+    document.getElementById('walletInfo').classList.remove('hidden');
+    
+    // 60s timer
+    let time = 60;
+    paymentTimer = setInterval(() => {
+        time--;
+        if(time <= 0) {
+            clearInterval(paymentTimer);
+            alert('Payment window expired');
+        }
+    }, 1000);
+}
+
+function verifyPayment() {
+    const txHash = document.getElementById('txHash').value;
+    if(!txHash) return alert('Enter TX hash');
+    
+    fetch('/api/verify-payment', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            userId: currentUser.id,
+            txHash,
+            country: document.getElementById('country').value,
+            service: document.getElementById('service').value
+        })
+    }).then(r => r.json()).then(data => {
+        if(data.success) {
+            numberData = data.number;
+            showNumber(data.number);
+        } else {
+            alert('Payment not confirmed');
+        }
+    });
+}
+
+function showNumber(number) {
+    document.getElementById('paymentSection').classList.add('hidden');
+    document.getElementById('numberSection').classList.remove('hidden');
+    document.getElementById('phoneNumber').textContent = number.phone;
+    
+    // Mock SMS
+    setTimeout(() => addSMS('Verification code: 528391'), 2000);
+    setTimeout(() => addSMS('Your code is 739482'), 5000);
+}
+
+function addSMS(code) {
+    const div = document.createElement('div');
+    div.className = 'bg-green-600/50 p-3 rounded-lg';
+    div.textContent = `SMS: ${code}`;
+    document.getElementById('smsCodes').appendChild(div);
+}
+
+function refreshSMS() {
+    if(numberData) {
+        fetch('/api/sms-refresh', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({phone: numberData.phone})
+        }).then(r => r.json()).then(data => {
+            data.sms.forEach(addSMS);
+        });
+    }
+}
